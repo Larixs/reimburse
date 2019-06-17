@@ -27,14 +27,27 @@
       <button class="button-add button-start-counting" @click="()=> {calculate('paper')}">开始计算贴发票内容</button>
       <button class="button-add button-start-counting" @click="()=> {calculate('system')}">开始计算报销系统内容</button>
       <table class="calculate-result">
-        <thead><th v-for="(item,index) in tableHead" :key="index">{{item}}</th></thead>
+        <thead v-if="calculateResult.length">
+          <th></th>
+          <th v-for="(item,index) in tableHead" :key="index">{{item}}</th>
+        </thead>
         <tbody>
           <tr v-for="(row, rowIndex) in calculateResult" :key="rowIndex">
+            <td></td>
             <td v-for="(cell, cellIndex) in row" :key="cellIndex">
               {{cell|isZero}}
             </td>
           </tr>
         </tbody>
+        <tfoot>
+          <tr v-if="calculateResult.length">
+            <td>总计</td>
+            <td
+              v-for="(colResult, index) in colResults"
+              :key="index"
+            >{{colResult|isZero}}</td>
+          </tr>
+        </tfoot>
       </table>
       <div class="total" v-if="allInTotal">
         总计： {{allInTotal}} <br>
@@ -79,7 +92,8 @@ export default {
       ],
       tableHead: [],
       allInTotal: 0,
-      nzhNumber: ''
+      nzhNumber: '',
+      colResults: []
     };
   },
   created() {},
@@ -123,7 +137,10 @@ export default {
         console.log('error in calculate', type);
         return;
       }
-      this.calculateResult = this.allJourney.map(i => this.calculateSingleJourney(i, type));
+      const sortedJourney = [...this.allJourney].sort((next, last)=> new Date(next.startTime).getTime() - new Date(last.startTime));
+      const preResult = sortedJourney.map(i => this.calculateSingleJourney(i, type));
+      this.calculateResult = preResult.map(i=>[i.startTime, i.place, i.duration, ...i.cost, i.allowance, i.all]);
+      this.colResults = this.calculateColResults(this.calculateResult);
       this.allInTotal = this.calculateResult.reduce((last, next) => last + next[next.length - 1], 0);
       this.nzhNumber = nzh.cn.toMoney(this.allInTotal, {complete:true, outSymbol:false});
     },
@@ -133,7 +150,30 @@ export default {
       const allowance = this.getAllowance(duration);
       let invoice = this.getInvoice(journeyInfo.reimbursement, type);
       const all = invoice.reduce((last, next) => last + next, allowance);
-      return [journeyInfo.startTime, place, duration, ...invoice, allowance, all];
+      return {
+        startTime: journeyInfo.startTime,
+        place,
+        duration,
+        cost: invoice,
+        allowance,
+        all
+      };
+    },
+    calculateColResults(res) {
+      if (res.length > 0 && res[0].length) {
+        const r = new Array(res[0].length).fill(0);
+        res.map(item=>{
+          for(let j = 0; j < item.length; j++){
+            const f = +(item[j]);
+            if(!isNaN(f)){
+              r[j] += f;
+            }
+          }
+        });
+        return r;
+      } else {
+        return [];
+      }
     },
     getDuration(startTime, endTime) {
       const _startTime = moment(startTime, 'YYYY-MM-DD');
@@ -213,7 +253,14 @@ export default {
         &:hover{
           background-color: #dadada;
         }
+        &:nth-child(even){
+          background-color: #f0f0f0;
+        }
       }
+    }
+    tfoot{
+      background-color: #fafafa;
+      border-top: 1px solid #e0e0e0;
     }
   }
 }
